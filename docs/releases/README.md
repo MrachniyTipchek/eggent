@@ -4,4 +4,5 @@ This directory contains release summaries and publish-ready notes.
 
 | Version | Name | Date | Notes |
 | --- | --- | --- | --- |
+| `0.1.2` | Dark Theme and Python Recovery | 2026-03-06 | [Full snapshot](./0.1.2-dark-theme-python-recovery.md), [GitHub body](./github-v0.1.2.md) |
 | `0.1.1` | Unified Context | 2026-03-03 | [Full snapshot](./0.1.1-unified-context.md), [GitHub body](./github-v0.1.1.md) |

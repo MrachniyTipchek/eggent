@@ -2,6 +2,6 @@ export async function GET() {
   return Response.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "0.1.1",
+    version: "0.1.2",
   });
 }
