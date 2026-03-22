@@ -180,9 +180,19 @@ export function ChatInput({
     [chatId]
   );
 
+  useEffect(() => {
+    if (input.length > 0) return;
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    // Reset textarea height back to a single-row composer after submit/clear.
+    textarea.style.height = "auto";
+  }, [input]);
+
   return (
     <div
-      className={`border-t bg-background p-4 transition-colors ${isDragging ? "bg-primary/5 border-primary" : ""}`}
+      className={`sticky bottom-0 z-20 shrink-0 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 transition-colors ${isDragging ? "bg-primary/5 border-primary" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

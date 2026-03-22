@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { MessageBubble } from "./message-bubble";
 import { Loader2 } from "lucide-react";
 import type { UIMessage } from "ai";
@@ -12,12 +12,31 @@ interface ChatMessagesProps {
 }
 
 export function ChatMessages({ messages, isLoading, errorMessage }: ChatMessagesProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const AUTO_SCROLL_THRESHOLD_PX = 96;
 
-  // Auto-scroll on new messages
+  const updateShouldAutoScroll = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom <= AUTO_SCROLL_THRESHOLD_PX;
+  }, []);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!shouldAutoScrollRef.current) return;
+    endRef.current?.scrollIntoView({
+      behavior: isLoading ? "auto" : "smooth",
+      block: "end",
+    });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    updateShouldAutoScroll();
+  }, [updateShouldAutoScroll]);
 
   if (messages.length === 0 && !isLoading) {
     return (
@@ -51,7 +70,11 @@ export function ChatMessages({ messages, isLoading, errorMessage }: ChatMessages
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 md:px-6">
+    <div
+      ref={scrollRef}
+      onScroll={updateShouldAutoScroll}
+      className="flex-1 overflow-y-auto px-4 md:px-6"
+    >
       <div className="max-w-3xl mx-auto py-4 space-y-1">
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
