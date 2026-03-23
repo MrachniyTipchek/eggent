@@ -7,6 +7,7 @@ import {
   Terminal,
   Brain,
   Search,
+  Globe,
   FileText,
   Bot,
   Puzzle,
@@ -27,6 +28,7 @@ const TOOL_ICONS: Record<string, React.ElementType> = {
   memory_load: Brain,
   memory_delete: Brain,
   search_web: Search,
+  web_fetch: Globe,
   knowledge_query: FileText,
   call_subordinate: Bot,
   load_skill: Puzzle,
@@ -51,6 +53,7 @@ const TOOL_LABELS: Record<string, string> = {
   memory_load: "Memory Load",
   memory_delete: "Memory Delete",
   search_web: "Web Search",
+  web_fetch: "Web Fetch",
   knowledge_query: "Knowledge Query",
   call_subordinate: "Subordinate Agent",
   load_skill: "Load Skill",
@@ -99,6 +102,11 @@ export function ToolOutput({ toolName, args, result }: ToolOutputProps) {
         {toolName === "search_web" && args.query ? (
           <span className="text-xs text-muted-foreground truncate">
             &quot;{String(args.query)}&quot;
+          </span>
+        ) : null}
+        {toolName === "web_fetch" && args.url ? (
+          <span className="text-xs text-muted-foreground truncate">
+            {String(args.url)}
           </span>
         ) : null}
       </button>

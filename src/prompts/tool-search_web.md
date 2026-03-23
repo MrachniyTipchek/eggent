@@ -13,6 +13,7 @@ Search the internet for current information.
 ## Best Practices
 
 - Use specific, targeted search queries
+- Do not pass raw URLs here; use `web_fetch` for direct link reading
 - For technical queries, include technology names and versions
 - Review multiple results before drawing conclusions
 - Cite sources when presenting information from search results

@@ -9,6 +9,69 @@ interface SearchResult {
 const MAX_RESULTS = 10;
 const DDG_HTML_ENDPOINT = "https://html.duckduckgo.com/html";
 const DDG_INSTANT_ENDPOINT = "https://api.duckduckgo.com/";
+const WEB_FETCH_TIMEOUT_MS = 20000;
+const WEB_FETCH_MAX_BYTES = 1_500_000;
+const WEB_FETCH_MAX_CHARS = 12000;
+
+export async function fetchWebPage(rawUrl: string): Promise<string> {
+  const url = normalizeFetchUrl(rawUrl);
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), WEB_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      redirect: "follow",
+      signal: abortController.signal,
+      headers: {
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,application/json;q=0.7,*/*;q=0.5",
+        "User-Agent":
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    const finalUrl = response.url || url.toString();
+    const rawBody = await readResponseBodyLimited(response, WEB_FETCH_MAX_BYTES);
+
+    const parsed = parseFetchedBody(rawBody, contentType);
+    const content = parsed.content.trim();
+    const trimmed = content.slice(0, WEB_FETCH_MAX_CHARS);
+    const wasTrimmed = content.length > WEB_FETCH_MAX_CHARS;
+
+    if (!trimmed) {
+      return `Fetched URL: ${finalUrl}\nContent-Type: ${contentType || "unknown"}\nNo readable text content found.`;
+    }
+
+    const lines: string[] = [
+      `Fetched URL: ${finalUrl}`,
+      `Content-Type: ${contentType || "unknown"}`,
+    ];
+    if (parsed.title) {
+      lines.push(`Title: ${parsed.title}`);
+    }
+    lines.push("");
+    lines.push(trimmed);
+    if (wasTrimmed) {
+      lines.push("");
+      lines.push(`[truncated to ${WEB_FETCH_MAX_CHARS} chars]`);
+    }
+
+    return lines.join("\n");
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return `Web fetch error: timed out after ${Math.round(WEB_FETCH_TIMEOUT_MS / 1000)} seconds`;
+    }
+    return `Web fetch error: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 /**
  * Search the web using configured provider
@@ -165,6 +228,119 @@ function stripHtml(text: string): string {
   return text
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeFetchUrl(raw: string): URL {
+  const input = raw.trim();
+  if (!input) {
+    throw new Error("URL is required.");
+  }
+
+  let normalized = input;
+  if (!/^[a-z][a-z\d+\-.]*:\/\//i.test(normalized)) {
+    if (/^(www\.)/i.test(normalized) || /^[a-z0-9.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(normalized)) {
+      normalized = `https://${normalized}`;
+    } else {
+      throw new Error("Invalid URL. Expected an absolute http(s) URL.");
+    }
+  }
+
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error("Invalid URL format.");
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Only http(s) URLs are supported.");
+  }
+
+  return url;
+}
+
+async function readResponseBodyLimited(response: Response, maxBytes: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return await response.text();
+  }
+
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(`Response too large. Limit: ${maxBytes} bytes.`);
+    }
+
+    text += decoder.decode(value, { stream: true });
+  }
+
+  text += decoder.decode();
+  return text;
+}
+
+function parseFetchedBody(
+  body: string,
+  contentType: string
+): { title?: string; content: string } {
+  if (contentType.includes("application/json")) {
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      return { content: JSON.stringify(parsed, null, 2) };
+    } catch {
+      return { content: body };
+    }
+  }
+
+  if (contentType.includes("text/html") || looksLikeHtml(body)) {
+    const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body);
+    const title = titleMatch ? normalizeFetchedText(stripHtml(decodeHtmlEntities(titleMatch[1]))) : "";
+    return {
+      title: title || undefined,
+      content: htmlToText(body),
+    };
+  }
+
+  return { content: normalizeFetchedText(body) };
+}
+
+function looksLikeHtml(body: string): boolean {
+  const sample = body.slice(0, 1000).toLowerCase();
+  return sample.includes("<html") || sample.includes("<body") || sample.includes("<!doctype html");
+}
+
+function htmlToText(html: string): string {
+  const cleaned = html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<template[\s\S]*?<\/template>/gi, " ");
+
+  const withBreaks = cleaned.replace(
+    /<\/?(h[1-6]|p|div|section|article|header|footer|main|aside|nav|li|ul|ol|table|tr|td|th|blockquote|pre|br)[^>]*>/gi,
+    "\n"
+  );
+
+  return normalizeFetchedText(decodeHtmlEntities(stripHtml(withBreaks)));
+}
+
+function normalizeFetchedText(text: string): string {
+  return text
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
 

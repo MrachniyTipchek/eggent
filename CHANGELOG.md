@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2026-03-23
+
+### Added
+- New `web_fetch` tool for direct URL reading and page extraction.
+- New prompt guide `tool-web_fetch.md` for link-specific workflows.
+
+### Changed
+- `search_web` is now explicitly discovery-oriented; direct links should use `web_fetch`.
+- Chat tool output UI now shows `Web Fetch` calls with the target URL.
+- Request lifecycle docs updated with `web_fetch` in tool catalog.
+
+### Fixed
+- Direct link requests no longer degrade into generic search queries.
+- Health endpoint version updated to `0.1.5`.
+
 ## [0.1.4] - 2026-03-23
 
 ### Added
