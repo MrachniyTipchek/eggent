@@ -1,152 +1,152 @@
 # Roadmap
 
-## Контекст
+## Context
 
-Этот roadmap основан на углублённом аудите кода с фокусом на безопасность, стабильность и качество реализации.
-Первый этап концентрируется на устранении критических проблем и подготовке базы для последующей оптимизации.
+This roadmap is based on a deeper code audit focused on security, stability, and implementation quality.
+The first stage focuses on eliminating critical issues and preparing a solid baseline for further optimization.
 
-## Этап 1 — Закрыть основные проблемы безопасности и качества кода
+## Stage 1 — Resolve Core Security and Code Quality Issues
 
-Статус: `planned`  
-Приоритет этапа: `highest`
+Status: `planned`  
+Stage priority: `highest`
 
-### Цели этапа
+### Stage goals
 
-1. Закрыть уязвимости с обходом путей и ослабленным контролем доступа.
-2. Уменьшить риск регрессий через базовую нормализацию quality-gates.
-3. Убрать явные архитектурные и кодовые проблемы: дубли, мёртвый код, перегруженные модули.
-4. Зафиксировать измеримые критерии готовности перед переходом к следующим этапам.
-
----
-
-## Backlog задач (Этап 1)
-
-### P0 — Безопасность и целостность данных
-
-1. **Закрыть path traversal в листинге файлов проекта**
-   - Файл: `src/lib/storage/project-store.ts` (`getProjectFiles`)
-   - Что сделать:
-     - Проверять, что целевой путь остаётся внутри `getWorkDir(projectId)`.
-     - Отклонять `subPath`, выводящий за границы проекта.
-   - Критерий готовности:
-     - Невозможно запросить содержимое директорий вне проекта через `GET /api/files`.
-
-2. **Усилить проверку границ пути в file download/delete API**
-   - Файлы: `src/app/api/files/route.ts`, `src/app/api/files/download/route.ts`
-   - Что сделать:
-     - Заменить проверку через простой `startsWith(base)` на безопасный вариант с нормализованной границей каталога.
-   - Критерий готовности:
-     - Попытки доступа к соседним директориям отклоняются стабильно на всех целевых сценариях.
-
-3. **Сузить публичность Telegram API в middleware**
-   - Файл: `middleware.ts`
-   - Что сделать:
-     - Убрать широкое правило для всего префикса `/api/integrations/telegram` c `POST`.
-     - Оставить публичными только действительно webhook/интеграционные точки, требующие внешнего вызова.
-   - Критерий готовности:
-     - Новые внутренние Telegram-роуты не становятся публичными по умолчанию.
-
-4. **Санитизация имён файлов в Knowledge API**
-   - Файл: `src/app/api/projects/[id]/knowledge/route.ts`
-   - Что сделать:
-     - Нормализовать/санитизировать `file.name` и `filename`.
-     - Добавить проверку, что итоговый путь всегда внутри `.meta/knowledge`.
-   - Критерий готовности:
-     - Запись и удаление файлов вне каталога знаний невозможны.
+1. Fix path traversal vulnerabilities and weak access control boundaries.
+2. Reduce regression risk through baseline quality gate normalization.
+3. Remove clear architectural and code issues: duplication, dead code, overloaded modules.
+4. Define measurable completion criteria before moving to the next stages.
 
 ---
 
-### P1 — Снижение эксплуатационных рисков
+## Backlog (Stage 1)
 
-5. **Ужесточить валидацию пользовательского `subdir` для memory API**
-   - Файл: `src/app/api/memory/route.ts`
-   - Что сделать:
-     - Ввести allowlist/схему валидации `subdir`.
-     - Исключить переходы в чужие директории.
-   - Критерий готовности:
-     - Нельзя получить доступ к памяти другого контекста через path-like значения.
+### P0 — Security and data integrity
 
-6. **Убрать небезопасный fallback секрета сессий**
-   - Файл: `src/lib/auth/session.ts`
-   - Что сделать:
-     - Запретить работу с дефолтным hardcoded-secret в production.
-     - Явно требовать `EGGENT_AUTH_SECRET`.
-   - Критерий готовности:
-     - Приложение не стартует в небезопасной конфигурации секрета.
+1. **Fix path traversal in project file listing**
+   - File: `src/lib/storage/project-store.ts` (`getProjectFiles`)
+   - Actions:
+     - Validate that resolved target paths always remain inside `getWorkDir(projectId)`.
+     - Reject `subPath` values that escape the project boundary.
+   - Done criteria:
+     - It is impossible to list directories outside the current project via `GET /api/files`.
 
-7. **Снизить риск утечки external API token**
-   - Файл: `src/app/api/external/token/route.ts`
-   - Что сделать:
-     - Пересмотреть выдачу полного токена и сценарий ротации.
-     - Уточнить однократную выдачу/маскирование в ответах и логах.
-   - Критерий готовности:
-     - Токен не появляется повторно в открытом виде без явной ротации.
+2. **Harden path boundary checks in file download/delete APIs**
+   - Files: `src/app/api/files/route.ts`, `src/app/api/files/download/route.ts`
+   - Actions:
+     - Replace simple `startsWith(base)` checks with a safe normalized directory-boundary strategy.
+   - Done criteria:
+     - Access attempts to sibling/outside directories are consistently rejected across target scenarios.
 
-8. **Выделить и документировать политику опасных инструментов агента**
-   - Файлы: `src/lib/tools/tool.ts`, `src/lib/tools/code-execution.ts`, `src/lib/mcp/client.ts`
-   - Что сделать:
-     - Ввести явные ограничения использования опасных инструментов в production-режиме.
-     - Определить минимально необходимый набор по умолчанию.
-   - Критерий готовности:
-     - Для production есть чёткий и безопасный дефолтный профиль включённых инструментов.
+3. **Narrow Telegram API public surface in middleware**
+   - File: `middleware.ts`
+   - Actions:
+     - Remove broad public `POST` allowance for the entire `/api/integrations/telegram` prefix.
+     - Keep only true webhook/integration endpoints public when external calls are required.
+   - Done criteria:
+     - New internal Telegram routes are not public by default.
 
----
-
-### P1/P2 — Неоптимизированный и потенциально мёртвый код
-
-9. **Декомпозировать `agent.ts`**
-   - Файл: `src/lib/agent/agent.ts`
-   - Что сделать:
-     - Выделить отдельные модули для recovery/loop-guard/conversion/persistence.
-     - Снизить когнитивную сложность и размер файла.
-   - Критерий готовности:
-     - Основной модуль оркестрации становится компактнее и легче для ревью.
-
-10. **Убрать дубли в Telegram integration API**
-    - Файлы: `src/app/api/integrations/telegram/*.ts`
-    - Что сделать:
-      - Вынести повторяющуюся логику вызовов Telegram API и парсинга ошибок в единый helper.
-    - Критерий готовности:
-      - Повторяющийся код устранён, поведение унифицировано.
-
-11. **Убрать дубли вокруг external session/project checks**
-    - Файлы: `src/lib/external/handle-external-message.ts`, `src/app/api/integrations/telegram/route.ts`
-    - Что сделать:
-      - Вынести повторяемые функции проверки и разрешения контекста в shared слой.
-    - Критерий готовности:
-      - Одна реализация логики контекста вместо нескольких независимых копий.
-
-12. **Проверить и удалить неиспользуемые экспорты/legacy-алиасы**
-    - Файл-кандидат: `src/lib/storage/project-store.ts` (`getProjectInstructionsDir`)
-    - Что сделать:
-      - Подтвердить отсутствие потребителей.
-      - Удалить или окончательно зафиксировать как совместимость с понятным контрактом.
-    - Критерий готовности:
-      - Нет «висящих» публичных API без потребителей и без причины существования.
-
-13. **Снизить I/O-стоимость чтения чатов и памяти**
-    - Файлы: `src/lib/storage/chat-store.ts`, `src/lib/memory/memory.ts`
-    - Что сделать:
-      - Спроектировать индекс/кэш-стратегию для списков.
-      - Снизить частоту полного переписывания больших JSON.
-    - Критерий готовности:
-      - Наблюдаемое уменьшение времени ответа на операциях списка и поиска при росте данных.
+4. **Sanitize file names in Knowledge API**
+   - File: `src/app/api/projects/[id]/knowledge/route.ts`
+   - Actions:
+     - Normalize/sanitize both `file.name` and `filename`.
+     - Add explicit checks that final paths always stay inside `.meta/knowledge`.
+   - Done criteria:
+     - Writing/deleting files outside the knowledge directory is impossible.
 
 ---
 
-## Definition of Done для Этапа 1
+### P1 — Operational risk reduction
 
-Этап считается завершённым, когда выполнены все пункты:
+5. **Harden user-provided `subdir` validation in memory API**
+   - File: `src/app/api/memory/route.ts`
+   - Actions:
+     - Introduce an allowlist/schema for `subdir`.
+     - Prevent traversal into other contexts/directories.
+   - Done criteria:
+     - Accessing another context’s memory via path-like values is impossible.
 
-1. Закрыты все задачи P0.
-2. Для задач P1 реализованы и задокументированы изменения, влияющие на production-безопасность.
-3. Линт и сборка проходят предсказуемо, без маскировки новых регрессий.
-4. Для критичных исправлений добавлены проверяемые сценарии (минимум smoke/integration).
-5. Удалены подтверждённые дубли и мёртвые участки из списка P1/P2.
+6. **Remove unsafe session secret fallback**
+   - File: `src/lib/auth/session.ts`
+   - Actions:
+     - Disallow default hardcoded secret usage in production.
+     - Require explicit `EGGENT_AUTH_SECRET`.
+   - Done criteria:
+     - The app cannot run with an insecure session-secret configuration.
+
+7. **Reduce external API token exposure risk**
+   - File: `src/app/api/external/token/route.ts`
+   - Actions:
+     - Rework full-token response behavior and rotation flow.
+     - Clarify one-time reveal/masking behavior in responses and logs.
+   - Done criteria:
+     - Token is not repeatedly exposed in plain text without explicit rotation.
+
+8. **Define and document policy for dangerous agent tools**
+   - Files: `src/lib/tools/tool.ts`, `src/lib/tools/code-execution.ts`, `src/lib/mcp/client.ts`
+   - Actions:
+     - Add explicit restrictions for dangerous tools in production mode.
+     - Define a minimal safe default enabled tool set.
+   - Done criteria:
+     - Production has a clear and safe default tool profile.
 
 ---
 
-## Порядок выполнения (рекомендуемый)
+### P1/P2 — Unoptimized and potentially dead code
+
+9. **Decompose `agent.ts`**
+   - File: `src/lib/agent/agent.ts`
+   - Actions:
+     - Extract separate modules for recovery/loop-guard/conversion/persistence.
+     - Reduce cognitive complexity and file size.
+   - Done criteria:
+     - Core orchestration module becomes smaller and easier to review.
+
+10. **Remove duplication in Telegram integration APIs**
+    - Files: `src/app/api/integrations/telegram/*.ts`
+    - Actions:
+      - Extract repeated Telegram API call/error parsing logic into a shared helper.
+    - Done criteria:
+      - Duplicate logic is removed and behavior is unified.
+
+11. **Remove duplication around external session/project checks**
+    - Files: `src/lib/external/handle-external-message.ts`, `src/app/api/integrations/telegram/route.ts`
+    - Actions:
+      - Move repeated context resolution/checking logic into a shared layer.
+    - Done criteria:
+      - Single implementation of context logic instead of multiple divergent copies.
+
+12. **Verify and remove unused exports/legacy aliases**
+    - Candidate file: `src/lib/storage/project-store.ts` (`getProjectInstructionsDir`)
+    - Actions:
+      - Confirm there are no active consumers.
+      - Remove it or keep it explicitly as compatibility API with a clear contract.
+    - Done criteria:
+      - No dangling public APIs without consumers or a clear reason to exist.
+
+13. **Reduce I/O cost for chat and memory reads**
+    - Files: `src/lib/storage/chat-store.ts`, `src/lib/memory/memory.ts`
+    - Actions:
+      - Design an index/cache strategy for list-heavy operations.
+      - Reduce full large-JSON rewrites frequency.
+    - Done criteria:
+      - Observable response-time reduction on list/search operations as data volume grows.
+
+---
+
+## Definition of Done for Stage 1
+
+Stage is considered complete when all of the following are true:
+
+1. All P0 tasks are completed.
+2. P1 changes that affect production security are implemented and documented.
+3. Lint and build pass predictably without masking new regressions.
+4. Critical fixes are covered with verifiable checks (minimum smoke/integration).
+5. Confirmed duplicates and dead code from P1/P2 are removed.
+
+---
+
+## Recommended execution order
 
 1. P0.1 → P0.2 → P0.4  
 2. P0.3 → P1.5 → P1.6  
