@@ -12,6 +12,7 @@ interface TokenStatusResponse {
   source: TokenSource;
   maskedToken: string | null;
   updatedAt: string | null;
+  lastRevealedAt?: string | null;
   error?: string;
 }
 
@@ -57,7 +58,11 @@ export function ExternalApiTokenManager() {
     setRotating(true);
     setCopied(false);
     try {
-      const res = await fetch("/api/external/token", { method: "POST" });
+      const res = await fetch("/api/external/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rotate: true }),
+      });
       const data = (await res.json()) as TokenRotateResponse;
       if (!res.ok) {
         throw new Error(data.error || "Failed to rotate token");

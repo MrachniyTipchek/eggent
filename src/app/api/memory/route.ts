@@ -6,11 +6,19 @@ import {
   getAllMemories,
 } from "@/lib/memory/memory";
 import { getSettings } from "@/lib/storage/settings-store";
+import { normalizeMemorySubdir } from "@/lib/memory/memory-subdir";
 
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("query");
-  const subdir = req.nextUrl.searchParams.get("subdir") || "main";
-  const limit = parseInt(req.nextUrl.searchParams.get("limit") || "20");
+  const subdirRaw = req.nextUrl.searchParams.get("subdir") || "main";
+  const subdir = normalizeMemorySubdir(subdirRaw);
+  if (!subdir) {
+    return Response.json({ error: "Invalid subdir" }, { status: 400 });
+  }
+  const limitRaw = parseInt(req.nextUrl.searchParams.get("limit") || "20", 10);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(200, Math.max(1, limitRaw))
+    : 20;
 
   if (query) {
     const settings = await getSettings();
@@ -32,7 +40,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { text, area, subdir } = body;
+    const { text, area, subdir: subdirBody } = body;
+    const subdir = normalizeMemorySubdir(subdirBody ?? "main");
+    if (!subdir) {
+      return Response.json({ error: "Invalid subdir" }, { status: 400 });
+    }
 
     if (!text) {
       return Response.json({ error: "Text is required" }, { status: 400 });
@@ -42,7 +54,7 @@ export async function POST(req: NextRequest) {
     const id = await insertMemory(
       text,
       area || "main",
-      subdir || "main",
+      subdir,
       settings
     );
 
@@ -60,7 +72,12 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
-  const subdir = req.nextUrl.searchParams.get("subdir") || "main";
+  const subdir = normalizeMemorySubdir(
+    req.nextUrl.searchParams.get("subdir") || "main"
+  );
+  if (!subdir) {
+    return Response.json({ error: "Invalid subdir" }, { status: 400 });
+  }
 
   if (!id) {
     return Response.json({ error: "Memory ID required" }, { status: 400 });

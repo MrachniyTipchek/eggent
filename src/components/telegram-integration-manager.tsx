@@ -366,7 +366,7 @@ export function TelegramIntegrationManager() {
               />
               <p className="text-xs text-muted-foreground">
                 Webhook endpoint:{" "}
-                <span className="font-mono">{publicBaseUrl || "https://..."}/api/integrations/telegram</span>
+                <span className="font-mono">{publicBaseUrl || "https://..."}/api/integrations/telegram/incoming</span>
               </p>
             </div>
 

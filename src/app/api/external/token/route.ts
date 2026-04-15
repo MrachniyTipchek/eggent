@@ -1,6 +1,9 @@
+import { NextRequest } from "next/server";
 import {
   generateExternalApiToken,
+  getExternalApiToken,
   getExternalApiTokenStatus,
+  markExternalApiTokenRevealed,
   maskExternalApiToken,
   saveExternalApiToken,
 } from "@/lib/storage/external-api-token-store";
@@ -18,6 +21,7 @@ export async function GET() {
       source: "stored" as const,
       maskedToken: storedStatus.maskedToken,
       updatedAt: storedStatus.updatedAt,
+      lastRevealedAt: storedStatus.lastRevealedAt,
     });
   }
 
@@ -28,6 +32,7 @@ export async function GET() {
       source: "env" as const,
       maskedToken: maskExternalApiToken(envToken),
       updatedAt: null as string | null,
+      lastRevealedAt: null as string | null,
     });
   }
 
@@ -36,13 +41,31 @@ export async function GET() {
     source: "none" as const,
     maskedToken: null,
     updatedAt: null as string | null,
+    lastRevealedAt: null as string | null,
   });
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const body = (await req.json().catch(() => ({}))) as { rotate?: unknown };
+    const rotateRequested = body?.rotate === true;
+    const existing = await getExternalApiToken();
+    if (existing && !rotateRequested) {
+      const status = await getExternalApiTokenStatus();
+      return Response.json(
+        {
+          error: "Token rotation requires rotate: true in the JSON body.",
+          configured: true,
+          maskedToken: status.maskedToken,
+          lastRevealedAt: status.lastRevealedAt,
+        },
+        { status: 409 }
+      );
+    }
+
     const token = generateExternalApiToken();
     await saveExternalApiToken(token);
+    await markExternalApiTokenRevealed();
 
     return Response.json({
       success: true,

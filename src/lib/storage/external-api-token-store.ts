@@ -10,6 +10,7 @@ interface ExternalApiTokenRecord {
   token: string;
   createdAt: string;
   updatedAt: string;
+  lastRevealedAt?: string | null;
 }
 
 async function ensureDir(dir: string) {
@@ -37,6 +38,7 @@ export async function getExternalApiTokenStatus(): Promise<{
   configured: boolean;
   maskedToken: string | null;
   updatedAt: string | null;
+  lastRevealedAt: string | null;
 }> {
   await ensureDir(SETTINGS_DIR);
   try {
@@ -50,18 +52,23 @@ export async function getExternalApiTokenStatus(): Promise<{
         configured: false,
         maskedToken: null,
         updatedAt,
+        lastRevealedAt: null,
       };
     }
+    const lastRevealedAt =
+      typeof parsed.lastRevealedAt === "string" ? parsed.lastRevealedAt : null;
     return {
       configured: true,
       maskedToken: maskToken(token),
       updatedAt,
+      lastRevealedAt,
     };
   } catch {
     return {
       configured: false,
       maskedToken: null,
       updatedAt: null,
+      lastRevealedAt: null,
     };
   }
 }
@@ -83,15 +90,41 @@ export async function saveExternalApiToken(token: string): Promise<void> {
       createdAt = parsed.createdAt;
     }
   } catch {
-    // Keep default createdAt.
   }
 
   const next: ExternalApiTokenRecord = {
     token: value,
     createdAt,
     updatedAt: now,
+    lastRevealedAt: null,
   };
   await fs.writeFile(TOKEN_FILE, JSON.stringify(next, null, 2), "utf-8");
+}
+
+export async function markExternalApiTokenRevealed(): Promise<void> {
+  await ensureDir(SETTINGS_DIR);
+  const now = new Date().toISOString();
+  let record: ExternalApiTokenRecord | null = null;
+  try {
+    const raw = await fs.readFile(TOKEN_FILE, "utf-8");
+    const parsed = JSON.parse(raw) as Partial<ExternalApiTokenRecord>;
+    const token = typeof parsed.token === "string" ? parsed.token.trim() : "";
+    if (!token) return;
+    record = {
+      token,
+      createdAt:
+        typeof parsed.createdAt === "string" && parsed.createdAt
+          ? parsed.createdAt
+          : now,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : now,
+      lastRevealedAt: now,
+    };
+  } catch {
+    return;
+  }
+  if (record) {
+    await fs.writeFile(TOKEN_FILE, JSON.stringify(record, null, 2), "utf-8");
+  }
 }
 
 export function generateExternalApiToken(): string {

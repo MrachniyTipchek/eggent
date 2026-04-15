@@ -487,7 +487,7 @@ export function buildTelegramWebhookUrl(publicBaseUrl: string): string {
   if (!base) {
     throw new Error("publicBaseUrl is required");
   }
-  return `${base}/api/integrations/telegram`;
+  return `${base}/api/integrations/telegram/incoming`;
 }
 
 export function generateTelegramWebhookSecret(): string {

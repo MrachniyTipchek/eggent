@@ -50,6 +50,9 @@ const TEXT_FILE_WRITE_MAX_CHARS = 400000;
 const PDF_FILE_READ_MAX_CHARS = 30000;
 const TELEGRAM_SEND_FILE_MAX_BYTES = 45 * 1024 * 1024;
 
+const PRODUCTION_DANGEROUS_TOOLS_DISABLED =
+  process.env.NODE_ENV === "production";
+
 interface TelegramRuntimeData {
   botToken: string;
   chatId: string | number;
@@ -758,7 +761,7 @@ export function createAgentTools(
   });
 
   // Code execution tool
-  if (settings.codeExecution.enabled) {
+  if (settings.codeExecution.enabled && !PRODUCTION_DANGEROUS_TOOLS_DISABLED) {
     tools.code_execution = tool({
       description:
         "Execute code in Python, Node.js, or Shell terminal. Use this to run scripts, install packages, manipulate files, perform calculations, or any task that requires code execution. For terminal runtime, session IDs preserve working directory continuity across calls.",

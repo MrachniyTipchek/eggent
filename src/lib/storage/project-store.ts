@@ -11,9 +11,17 @@ import {
 import { deleteChatsByProjectId } from "@/lib/storage/chat-store";
 import { clearMemoryCache } from "@/lib/memory/memory";
 import { publishUiSyncEvent } from "@/lib/realtime/event-bus";
+import {
+  isSafeProjectDirectoryId,
+  resolvePathInsideDirectory,
+} from "@/lib/storage/path-utils";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const PROJECTS_DIR = path.join(DATA_DIR, "projects");
+const INVALID_PROJECT_WORKDIR = path.join(
+  PROJECTS_DIR,
+  "__eggent_invalid_project__"
+);
 
 /** ID used for "No Project (Global)" — work dir is data/projects */
 export const GLOBAL_PROJECT_ID = "none";
@@ -24,7 +32,10 @@ export const GLOBAL_PROJECT_ID = "none";
  */
 export function getWorkDir(projectId?: string | null): string {
   if (!projectId || projectId === GLOBAL_PROJECT_ID) return PROJECTS_DIR;
-  return path.join(PROJECTS_DIR, projectId);
+  if (!isSafeProjectDirectoryId(projectId)) {
+    return INVALID_PROJECT_WORKDIR;
+  }
+  return path.join(PROJECTS_DIR, projectId.trim());
 }
 
 async function ensureDir(dir: string) {
@@ -47,11 +58,6 @@ export function getProjectSkillsDir(projectId: string): string {
 /** Legacy path to project's .meta/instructions directory (kept for compatibility/migration). */
 function getProjectLegacyInstructionsDir(projectId: string): string {
   return path.join(projectMetaDir(projectId), "instructions");
-}
-
-/** @deprecated Use getProjectSkillsDir. Kept for compatibility with existing imports. */
-export function getProjectInstructionsDir(projectId: string): string {
-  return getProjectSkillsDir(projectId);
 }
 
 /** Path to project's .meta/mcp directory — MCP servers config (next to skills) */
@@ -1324,6 +1330,9 @@ export async function getAllProjects(): Promise<Project[]> {
 }
 
 export async function getProject(projectId: string): Promise<Project | null> {
+  if (!isSafeProjectDirectoryId(projectId)) {
+    return null;
+  }
   try {
     const content = await fs.readFile(projectMetaFile(projectId), "utf-8");
     return JSON.parse(content);
@@ -1335,6 +1344,9 @@ export async function getProject(projectId: string): Promise<Project | null> {
 export async function createProject(
   project: Omit<Project, "createdAt" | "updatedAt">
 ): Promise<Project> {
+  if (!isSafeProjectDirectoryId(project.id)) {
+    throw new Error("Invalid project id");
+  }
   const now = new Date().toISOString();
   const fullProject: Project = {
     ...project,
@@ -1446,9 +1458,13 @@ export async function getProjectFiles(
   subPath: string = ""
 ): Promise<{ name: string; type: "file" | "directory"; size: number }[]> {
   const baseDir = getWorkDir(projectId);
-  const targetDir = subPath
-    ? path.join(baseDir, subPath)
+  const targetDir = subPath.trim()
+    ? resolvePathInsideDirectory(baseDir, subPath)
     : baseDir;
+
+  if (!targetDir) {
+    return [];
+  }
 
   try {
     const entries = await fs.readdir(targetDir, { withFileTypes: true });
@@ -1475,7 +1491,10 @@ export async function getProjectFiles(
 }
 
 export function getProjectWorkDir(projectId: string): string {
-  return path.join(PROJECTS_DIR, projectId);
+  if (!isSafeProjectDirectoryId(projectId)) {
+    return INVALID_PROJECT_WORKDIR;
+  }
+  return path.join(PROJECTS_DIR, projectId.trim());
 }
 
 export { PROJECTS_DIR };

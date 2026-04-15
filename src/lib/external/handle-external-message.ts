@@ -2,8 +2,11 @@ import { runAgentText } from "@/lib/agent/agent";
 import { createChat, getChat } from "@/lib/storage/chat-store";
 import { getAllProjects, getProject } from "@/lib/storage/project-store";
 import {
+  chatBelongsToProject,
+  resolveExternalSessionProject,
+} from "@/lib/external/session-project";
+import {
   contextKey,
-  getOrCreateExternalSession,
   saveExternalSession,
   type ExternalSession,
 } from "@/lib/storage/external-session-store";
@@ -137,15 +140,6 @@ function parseCreateProjectSignal(
   return { projectId };
 }
 
-function chatBelongsToProject(
-  chatProjectId: string | undefined,
-  projectId: string | undefined
-): boolean {
-  const left = chatProjectId ?? null;
-  const right = projectId ?? null;
-  return left === right;
-}
-
 async function ensureChatForProject(
   session: ExternalSession,
   projectId: string | undefined
@@ -183,33 +177,17 @@ export async function handleExternalMessage(
     throw new ExternalMessageError(400, { error: "message is required" });
   }
 
-  const session = await getOrCreateExternalSession(sessionId);
-  const projects = await getAllProjects();
-  const projectById = new Map(projects.map((project) => [project.id, project]));
-  if (session.activeProjectId && !projectById.has(session.activeProjectId)) {
-    session.activeProjectId = null;
+  const resolved = await resolveExternalSessionProject({
+    sessionId,
+    explicitProjectId: explicitProjectId || undefined,
+  });
+  if (!resolved.ok) {
+    throw new ExternalMessageError(404, {
+      error: `Project "${resolved.explicitProjectId}" not found`,
+      availableProjects: resolved.availableProjects,
+    });
   }
-
-  let resolvedProjectId: string | undefined;
-
-  if (explicitProjectId) {
-    if (!projectById.has(explicitProjectId)) {
-      throw new ExternalMessageError(404, {
-        error: `Project "${explicitProjectId}" not found`,
-        availableProjects: projects.map((project) => ({
-          id: project.id,
-          name: project.name,
-        })),
-      });
-    }
-    resolvedProjectId = explicitProjectId;
-    session.activeProjectId = explicitProjectId;
-  } else if (session.activeProjectId && projectById.has(session.activeProjectId)) {
-    resolvedProjectId = session.activeProjectId;
-  } else if (projects.length > 0) {
-    resolvedProjectId = projects[0].id;
-    session.activeProjectId = projects[0].id;
-  }
+  const { session, resolvedProjectId } = resolved;
 
   const contextId = contextKey(resolvedProjectId);
   const currentPath =

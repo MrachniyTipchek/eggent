@@ -6,11 +6,24 @@ import { publishUiSyncEvent } from "@/lib/realtime/event-bus";
 const DATA_DIR = path.join(process.cwd(), "data");
 const CHATS_DIR = path.join(DATA_DIR, "chats");
 
+let chatListCacheGen = 0;
+let chatListCacheSnapshot: ChatListItem[] | null = null;
+let chatListCacheForGen = -1;
+
 async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+function bumpChatListCache() {
+  chatListCacheGen += 1;
+  chatListCacheSnapshot = null;
+  chatListCacheForGen = -1;
+}
+
 export async function getAllChats(): Promise<ChatListItem[]> {
+  if (chatListCacheSnapshot && chatListCacheForGen === chatListCacheGen) {
+    return chatListCacheSnapshot;
+  }
   await ensureDir(CHATS_DIR);
   const files = await fs.readdir(CHATS_DIR);
   const chats: ChatListItem[] = [];
@@ -29,13 +42,15 @@ export async function getAllChats(): Promise<ChatListItem[]> {
         messageCount: chat.messages.length,
       });
     } catch {
-      // skip corrupted files
     }
   }
 
-  return chats.sort(
+  const sorted = chats.sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
+  chatListCacheSnapshot = sorted;
+  chatListCacheForGen = chatListCacheGen;
+  return sorted;
 }
 
 export async function getChat(chatId: string): Promise<Chat | null> {
@@ -53,6 +68,7 @@ export async function saveChat(chat: Chat): Promise<void> {
   await ensureDir(CHATS_DIR);
   const filePath = path.join(CHATS_DIR, `${chat.id}.json`);
   await fs.writeFile(filePath, JSON.stringify(chat, null, 2), "utf-8");
+  bumpChatListCache();
   publishUiSyncEvent({
     topic: "chat",
     chatId: chat.id,
@@ -66,6 +82,7 @@ export async function deleteChat(chatId: string): Promise<boolean> {
   const filePath = path.join(CHATS_DIR, `${chatId}.json`);
   try {
     await fs.unlink(filePath);
+    bumpChatListCache();
     publishUiSyncEvent({
       topic: "chat",
       chatId,
@@ -97,6 +114,7 @@ export async function deleteChatsByProjectId(projectId: string): Promise<number>
     }
   }
   if (deleted > 0) {
+    bumpChatListCache();
     publishUiSyncEvent({
       topic: "chat",
       projectId,

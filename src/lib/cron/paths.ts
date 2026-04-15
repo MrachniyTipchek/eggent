@@ -1,4 +1,5 @@
 import path from "path";
+import { isSafeProjectDirectoryId } from "@/lib/storage/path-utils";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const PROJECTS_DIR = path.join(DATA_DIR, "projects");
@@ -9,6 +10,9 @@ export function resolveCronProjectDir(projectId: string): string {
   const normalized = projectId.trim();
   if (!normalized || normalized === GLOBAL_CRON_PROJECT_ID) {
     return path.join(DATA_DIR, "cron", "main");
+  }
+  if (!isSafeProjectDirectoryId(normalized)) {
+    return path.join(DATA_DIR, "cron", "__invalid__");
   }
   return path.join(PROJECTS_DIR, normalized, ".meta", "cron");
 }

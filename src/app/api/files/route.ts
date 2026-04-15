@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import fs from "fs/promises";
-import path from "path";
 import { getProjectFiles, getWorkDir } from "@/lib/storage/project-store";
 import { publishUiSyncEvent } from "@/lib/realtime/event-bus";
+import { resolvePathInsideDirectory } from "@/lib/storage/path-utils";
 
 export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("project");
@@ -31,24 +31,17 @@ export async function DELETE(req: NextRequest) {
   }
 
   const workDir = getWorkDir(projectId);
-  const fullPath = path.join(workDir, filePath);
-
-  // Security: ensure the path stays within the project directory
-  const resolvedPath = path.resolve(fullPath);
-  const resolvedWorkDir = path.resolve(workDir);
-  if (!resolvedPath.startsWith(resolvedWorkDir)) {
-    return Response.json(
-      { error: "Invalid file path" },
-      { status: 403 }
-    );
+  const resolvedTarget = resolvePathInsideDirectory(workDir, filePath);
+  if (!resolvedTarget) {
+    return Response.json({ error: "Invalid file path" }, { status: 403 });
   }
 
   try {
-    const stat = await fs.stat(fullPath);
+    const stat = await fs.stat(resolvedTarget);
     if (stat.isDirectory()) {
-      await fs.rm(fullPath, { recursive: true });
+      await fs.rm(resolvedTarget, { recursive: true });
     } else {
-      await fs.unlink(fullPath);
+      await fs.unlink(resolvedTarget);
     }
     publishUiSyncEvent({
       topic: "files",

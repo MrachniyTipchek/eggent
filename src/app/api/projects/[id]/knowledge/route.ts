@@ -4,6 +4,10 @@ import path from "path";
 import fs from "fs/promises";
 import { importKnowledgeFile } from "@/lib/memory/knowledge";
 import { deleteMemoryByMetadata, getChunkCountsByFilename } from "@/lib/memory/memory";
+import {
+    getProjectKnowledgeDir,
+    resolveKnowledgeFilePath,
+} from "@/lib/projects/knowledge-paths";
 import { getProject } from "@/lib/storage/project-store";
 import { getSettings } from "@/lib/storage/settings-store";
 
@@ -12,8 +16,11 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params;
-    const projectDir = path.join(process.cwd(), "data", "projects", id);
-    const knowledgeDir = path.join(projectDir, ".meta", "knowledge");
+    const project = await getProject(id);
+    if (!project) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    const knowledgeDir = getProjectKnowledgeDir(id);
 
     try {
         await fs.access(knowledgeDir);
@@ -26,16 +33,20 @@ export async function GET(
         const chunkCounts = await getChunkCountsByFilename(id);
         const fileDetails = await Promise.all(
             files.map(async (file) => {
-                const stats = await fs.stat(path.join(knowledgeDir, file));
+                const resolved = resolveKnowledgeFilePath(knowledgeDir, file);
+                if (!resolved) {
+                    return null;
+                }
+                const stats = await fs.stat(resolved);
                 return {
-                    name: file,
+                    name: path.basename(resolved),
                     size: stats.size,
                     createdAt: stats.birthtime,
-                    chunkCount: chunkCounts[file] ?? 0,
+                    chunkCount: chunkCounts[path.basename(resolved)] ?? 0,
                 };
             })
         );
-        return NextResponse.json(fileDetails);
+        return NextResponse.json(fileDetails.filter(Boolean));
     } catch (error) {
         return NextResponse.json(
             { error: "Failed to list knowledge files" },
@@ -63,14 +74,17 @@ export async function POST(
         return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const projectDir = path.join(process.cwd(), "data", "projects", id);
-    const knowledgeDir = path.join(projectDir, ".meta", "knowledge");
+    const knowledgeDir = getProjectKnowledgeDir(id);
 
     // Ensure knowledge directory exists
     await fs.mkdir(knowledgeDir, { recursive: true });
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const filePath = path.join(knowledgeDir, file.name);
+    const safeName = path.basename(file.name.trim());
+    const filePath = resolveKnowledgeFilePath(knowledgeDir, safeName);
+    if (!filePath || !safeName) {
+        return NextResponse.json({ error: "Invalid file name" }, { status: 400 });
+    }
 
     try {
         // Save file
@@ -78,7 +92,7 @@ export async function POST(
 
         // Ingest only the uploaded file (removes its old chunks first, so no duplicates)
         const settings = await getSettings();
-        const result = await importKnowledgeFile(knowledgeDir, id, settings, file.name);
+        const result = await importKnowledgeFile(knowledgeDir, id, settings, safeName);
 
         if (result.errors.length > 0) {
             console.error("Ingestion errors:", result.errors);
@@ -93,7 +107,7 @@ export async function POST(
 
         return NextResponse.json({
             message: "File uploaded and ingested successfully",
-            filename: file.name
+            filename: safeName
         });
 
     } catch (error) {
@@ -124,9 +138,12 @@ export async function DELETE(
             return NextResponse.json({ error: "Filename is required" }, { status: 400 });
         }
 
-        const projectDir = path.join(process.cwd(), "data", "projects", id);
-        const knowledgeDir = path.join(projectDir, ".meta", "knowledge");
-        const filePath = path.join(knowledgeDir, filename);
+        const knowledgeDir = getProjectKnowledgeDir(id);
+        const safeName = path.basename(String(filename).trim());
+        const filePath = resolveKnowledgeFilePath(knowledgeDir, safeName);
+        if (!filePath || !safeName) {
+            return NextResponse.json({ error: "Invalid file name" }, { status: 400 });
+        }
 
         // Delete file from disk
         try {
@@ -139,7 +156,7 @@ export async function DELETE(
         }
 
         // Delete vectors
-        const deletedVectors = await deleteMemoryByMetadata("filename", filename, id);
+        const deletedVectors = await deleteMemoryByMetadata("filename", safeName, id);
 
         return NextResponse.json({
             message: "File and vectors deleted successfully",

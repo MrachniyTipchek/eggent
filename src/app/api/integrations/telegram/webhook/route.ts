@@ -2,43 +2,9 @@ import {
   buildTelegramWebhookUrl,
   getTelegramIntegrationRuntimeConfig,
 } from "@/lib/storage/telegram-integration-store";
+import { callTelegramApi } from "@/lib/integrations/telegram/bot-api";
 
 export const dynamic = "force-dynamic";
-
-interface TelegramApiResponse {
-  ok?: boolean;
-  description?: string;
-  result?: Record<string, unknown>;
-}
-
-function parseTelegramError(status: number, payload: TelegramApiResponse | null): string {
-  const description = payload?.description?.trim();
-  return description
-    ? `Telegram API error (${status}): ${description}`
-    : `Telegram API error (${status})`;
-}
-
-async function callTelegramApi(
-  botToken: string,
-  method: string,
-  body?: Record<string, unknown>
-): Promise<TelegramApiResponse> {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const payload = (await response.json().catch(() => null)) as
-    | TelegramApiResponse
-    | null;
-
-  if (!response.ok || !payload?.ok) {
-    throw new Error(parseTelegramError(response.status, payload));
-  }
-
-  return payload;
-}
 
 function ensureWebhookConfigured(config: {
   botToken: string;

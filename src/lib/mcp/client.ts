@@ -408,6 +408,9 @@ export async function getProjectMcpTools(projectId: string): Promise<{
   cleanup: () => Promise<void>;
   serverIds: string[];
 } | null> {
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
   const { loadProjectMcpServers } = await import("@/lib/storage/project-store");
   const config = await loadProjectMcpServers(projectId);
   if (!config?.servers?.length) return null;

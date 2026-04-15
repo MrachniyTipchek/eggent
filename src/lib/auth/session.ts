@@ -28,10 +28,14 @@ function parseBooleanEnv(value: string | undefined): boolean | null {
 }
 
 function getSessionSecret(): string {
-  return (
-    process.env.EGGENT_AUTH_SECRET?.trim() ||
-    "eggent-default-auth-secret-change-me"
-  );
+  const fromEnv = process.env.EGGENT_AUTH_SECRET?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("EGGENT_AUTH_SECRET is required in production");
+  }
+  return "eggent-default-auth-secret-change-me";
 }
 
 function utf8ToBytes(value: string): Uint8Array {

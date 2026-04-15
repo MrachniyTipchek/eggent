@@ -139,6 +139,9 @@ export async function executeCode(
   cwd?: string,
   options?: ExecuteCodeOptions
 ): Promise<string> {
+  if (process.env.NODE_ENV === "production") {
+    return "Code execution is disabled in production.";
+  }
   const timeoutMs = toPositiveInteger(config.timeout, 180) * 1000;
   const maxOutput = toPositiveInteger(config.maxOutputLength, 50000);
   const baseCwd = cwd || process.cwd();

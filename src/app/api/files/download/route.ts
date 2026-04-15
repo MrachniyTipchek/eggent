@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 import { getWorkDir } from "@/lib/storage/project-store";
+import { resolvePathInsideDirectory } from "@/lib/storage/path-utils";
 
 export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("project");
@@ -15,21 +16,14 @@ export async function GET(req: NextRequest) {
   }
 
   const workDir = getWorkDir(projectId);
-  const fullPath = path.join(workDir, filePath);
-
-  // Security check
-  const resolvedPath = path.resolve(fullPath);
-  const resolvedWorkDir = path.resolve(workDir);
-  if (!resolvedPath.startsWith(resolvedWorkDir)) {
-    return Response.json(
-      { error: "Invalid file path" },
-      { status: 403 }
-    );
+  const resolvedTarget = resolvePathInsideDirectory(workDir, filePath);
+  if (!resolvedTarget) {
+    return Response.json({ error: "Invalid file path" }, { status: 403 });
   }
 
   try {
-    const content = await fs.readFile(fullPath);
-    const fileName = path.basename(filePath);
+    const content = await fs.readFile(resolvedTarget);
+    const fileName = path.basename(resolvedTarget);
 
     return new Response(content, {
       headers: {

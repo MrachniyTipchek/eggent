@@ -7,45 +7,18 @@ import {
   getTelegramIntegrationStoredSettings,
   saveTelegramIntegrationStoredSettings,
 } from "@/lib/storage/telegram-integration-store";
-
-interface TelegramApiResponse {
-  ok?: boolean;
-  description?: string;
-}
-
-function parseTelegramError(status: number, payload: TelegramApiResponse | null): string {
-  const description = payload?.description?.trim();
-  return description
-    ? `Telegram API error (${status}): ${description}`
-    : `Telegram API error (${status})`;
-}
+import { callTelegramApi } from "@/lib/integrations/telegram/bot-api";
 
 async function setTelegramWebhook(params: {
   botToken: string;
   webhookUrl: string;
   webhookSecret: string;
 }): Promise<void> {
-  const response = await fetch(
-    `https://api.telegram.org/bot${params.botToken}/setWebhook`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url: params.webhookUrl,
-        secret_token: params.webhookSecret,
-        drop_pending_updates: false,
-      }),
-    }
-  );
-
-  const payload = (await response.json().catch(() => null)) as
-    | TelegramApiResponse
-    | null;
-  if (!response.ok || !payload?.ok) {
-    throw new Error(parseTelegramError(response.status, payload));
-  }
+  await callTelegramApi(params.botToken, "setWebhook", {
+    url: params.webhookUrl,
+    secret_token: params.webhookSecret,
+    drop_pending_updates: false,
+  });
 }
 
 function inferPublicBaseUrl(req: NextRequest): string {

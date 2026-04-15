@@ -24,10 +24,16 @@ import { createChat, getChat } from "@/lib/storage/chat-store";
 import {
   contextKey,
   type ExternalSession,
-  getOrCreateExternalSession,
   saveExternalSession,
 } from "@/lib/storage/external-session-store";
-import { getAllProjects } from "@/lib/storage/project-store";
+import {
+  chatBelongsToProject,
+  resolveExternalSessionProject,
+} from "@/lib/external/session-project";
+import {
+  callTelegramApi,
+  sendTelegramMessage as sendTelegramMessageApi,
+} from "@/lib/integrations/telegram/bot-api";
 
 const TELEGRAM_TEXT_LIMIT = 4096;
 const TELEGRAM_FILE_MAX_BYTES = 30 * 1024 * 1024;
@@ -74,12 +80,6 @@ interface TelegramMessage {
   };
 }
 
-interface TelegramApiResponse {
-  ok?: boolean;
-  description?: string;
-  result?: Record<string, unknown>;
-}
-
 interface TelegramIncomingFile {
   fileId: string;
   fileName: string;
@@ -105,33 +105,6 @@ interface TelegramResolvedProjectContext {
   projectName?: string;
 }
 
-function parseTelegramError(status: number, payload: TelegramApiResponse | null): string {
-  const description = payload?.description?.trim();
-  return description
-    ? `Telegram API error (${status}): ${description}`
-    : `Telegram API error (${status})`;
-}
-
-async function callTelegramApi(
-  botToken: string,
-  method: string,
-  body?: Record<string, unknown>
-): Promise<TelegramApiResponse> {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const payload = (await response.json().catch(() => null)) as
-    | TelegramApiResponse
-    | null;
-  if (!response.ok || !payload?.ok) {
-    throw new Error(parseTelegramError(response.status, payload));
-  }
-  return payload;
-}
-
 function safeTokenMatch(actual: string, expected: string): boolean {
   const actualBytes = Buffer.from(actual);
   const expectedBytes = Buffer.from(expected);
@@ -146,15 +119,6 @@ function getBotId(botToken: string): string {
   const [rawBotId] = botToken.trim().split(":", 1);
   const botId = rawBotId?.trim() || "default";
   return botId.replace(/[^a-zA-Z0-9._:-]/g, "_").slice(0, 128) || "default";
-}
-
-function chatBelongsToProject(
-  chatProjectId: string | undefined,
-  projectId: string | undefined
-): boolean {
-  const left = chatProjectId ?? null;
-  const right = projectId ?? null;
-  return left === right;
 }
 
 async function ensureTelegramExternalChatContext(params: {
@@ -201,31 +165,17 @@ async function resolveTelegramProjectContext(params: {
   sessionId: string;
   defaultProjectId?: string;
 }): Promise<TelegramResolvedProjectContext> {
-  const session = await getOrCreateExternalSession(params.sessionId);
-  const projects = await getAllProjects();
-  const projectById = new Map(projects.map((project) => [project.id, project]));
-
-  let resolvedProjectId: string | undefined;
-  const explicitProjectId = params.defaultProjectId?.trim() || "";
-  if (explicitProjectId) {
-    if (!projectById.has(explicitProjectId)) {
-      throw new Error(`Project "${explicitProjectId}" not found`);
-    }
-    resolvedProjectId = explicitProjectId;
-    session.activeProjectId = explicitProjectId;
-  } else if (session.activeProjectId && projectById.has(session.activeProjectId)) {
-    resolvedProjectId = session.activeProjectId;
-  } else if (projects.length > 0) {
-    resolvedProjectId = projects[0].id;
-    session.activeProjectId = projects[0].id;
-  } else {
-    session.activeProjectId = null;
+  const resolved = await resolveExternalSessionProject({
+    sessionId: params.sessionId,
+    explicitProjectId: params.defaultProjectId?.trim() || undefined,
+  });
+  if (!resolved.ok) {
+    throw new Error(`Project "${resolved.explicitProjectId}" not found`);
   }
-
   return {
-    session,
-    resolvedProjectId,
-    projectName: resolvedProjectId ? projectById.get(resolvedProjectId)?.name : undefined,
+    session: resolved.session,
+    resolvedProjectId: resolved.resolvedProjectId,
+    projectName: resolved.projectName,
   };
 }
 
@@ -427,27 +377,10 @@ async function sendTelegramMessage(
   text: string,
   replyToMessageId?: number
 ): Promise<void> {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: normalizeOutgoingText(text),
-      ...(typeof replyToMessageId === "number" ? { reply_to_message_id: replyToMessageId } : {}),
-    }),
+  await sendTelegramMessageApi(botToken, chatId, text, {
+    replyToMessageId,
+    transformOutgoingText: normalizeOutgoingText,
   });
-
-  const payload = (await response.json().catch(() => null)) as
-    | { ok?: boolean; description?: string }
-    | null;
-
-  if (!response.ok || !payload?.ok) {
-    throw new Error(
-      `Telegram sendMessage failed (${response.status})${payload?.description ? `: ${payload.description}` : ""}`
-    );
-  }
 }
 
 function helpText(activeProject?: { id?: string; name?: string }): string {

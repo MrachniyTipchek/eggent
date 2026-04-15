@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { embedTexts } from "@/lib/memory/embeddings";
+import { normalizeMemorySubdir } from "@/lib/memory/memory-subdir";
 import type { VectorDocument, AppSettings } from "@/lib/types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -16,13 +17,20 @@ interface MemoryDB {
 // In-memory cache of loaded databases
 const dbCache: Map<string, MemoryDB> = new Map();
 
-function getDbPath(subdir: string): string {
-  return path.join(DATA_DIR, "memory", subdir, "vectors.json");
+function resolveDbPath(subdir: string): string {
+  const safe = normalizeMemorySubdir(subdir);
+  if (!safe) {
+    throw new Error("Invalid memory subdir");
+  }
+  return path.join(DATA_DIR, "memory", safe, "vectors.json");
 }
 
 /** Remove subdir from in-memory cache (e.g. when project is deleted). */
 export function clearMemoryCache(subdir: string): void {
-  dbCache.delete(subdir);
+  const safe = normalizeMemorySubdir(subdir);
+  if (safe) {
+    dbCache.delete(safe);
+  }
 }
 
 async function ensureDir(dir: string) {
@@ -33,22 +41,26 @@ async function ensureDir(dir: string) {
  * Load or create a vector database
  */
 async function loadDB(subdir: string): Promise<MemoryDB> {
-  if (dbCache.has(subdir)) {
-    return dbCache.get(subdir)!;
+  const safe = normalizeMemorySubdir(subdir);
+  if (!safe) {
+    throw new Error("Invalid memory subdir");
+  }
+  if (dbCache.has(safe)) {
+    return dbCache.get(safe)!;
   }
 
-  const dbPath = getDbPath(subdir);
+  const dbPath = resolveDbPath(safe);
   try {
     const content = await fs.readFile(dbPath, "utf-8");
     const db: MemoryDB = JSON.parse(content);
-    dbCache.set(subdir, db);
+    dbCache.set(safe, db);
     return db;
   } catch {
     const db: MemoryDB = {
       documents: [],
       metadata: { lastUpdated: new Date().toISOString(), count: 0 },
     };
-    dbCache.set(subdir, db);
+    dbCache.set(safe, db);
     return db;
   }
 }
@@ -57,12 +69,16 @@ async function loadDB(subdir: string): Promise<MemoryDB> {
  * Save the database to disk
  */
 async function saveDB(subdir: string, db: MemoryDB): Promise<void> {
-  const dbPath = getDbPath(subdir);
+  const safe = normalizeMemorySubdir(subdir);
+  if (!safe) {
+    throw new Error("Invalid memory subdir");
+  }
+  const dbPath = resolveDbPath(safe);
   await ensureDir(path.dirname(dbPath));
   db.metadata.lastUpdated = new Date().toISOString();
   db.metadata.count = db.documents.length;
   await fs.writeFile(dbPath, JSON.stringify(db), "utf-8");
-  dbCache.set(subdir, db);
+  dbCache.set(safe, db);
 }
 
 /**

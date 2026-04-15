@@ -56,7 +56,9 @@ export default function ApiPage() {
               <section className="rounded-lg border bg-card p-4 space-y-3">
                 <h3 className="text-lg font-medium">Telegram Webhook</h3>
                 <p className="text-sm text-muted-foreground">
-                  Telegram endpoint: <span className="font-mono">POST /api/integrations/telegram</span>.
+                  Telegram endpoint:{" "}
+                  <span className="font-mono">POST /api/integrations/telegram/incoming</span> (legacy{" "}
+                  <span className="font-mono">POST /api/integrations/telegram</span> still works).
                   It reuses the same external session context engine as{" "}
                   <span className="font-mono">/api/external/message</span>.
                 </p>
@@ -68,7 +70,7 @@ export default function ApiPage() {
                   code={`curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "url": "https://YOUR_PUBLIC_BASE_URL/api/integrations/telegram",
+    "url": "https://YOUR_PUBLIC_BASE_URL/api/integrations/telegram/incoming",
     "secret_token": "'$TELEGRAM_WEBHOOK_SECRET'"
   }'`}
                 />
